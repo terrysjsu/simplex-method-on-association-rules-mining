@@ -1,4 +1,4 @@
-/* fpt.cpp
+/* simplex_beta_1.0.cpp
  *
  * Rui Tong
  * Department of Computer Science
@@ -18,7 +18,14 @@
 using namespace std;
 /***** Data Structure *****/
 /* Description:
- *  
+ * structure of table: 
+ * bool ** table: 2-d table array representing real database
+ * int * index: item name
+ * int * support: total support of each item
+ * int num_row: table's row
+ * int num_column: table's column
+ * string str_item: the frequent pattern for current table
+ * int count: count for the current str_item
  */
 typedef struct Table *Table_pointer;	/* Pointer to a FP-tree node */
 
@@ -29,7 +36,7 @@ typedef struct Table {
 	int num_row;
 	int num_column;
 	string str_item; // the parent string for this table
-	int count; //the count for the item
+	int count; //the count for the item of current table
 } Table;
 
 /***** Global Variables *****/
@@ -41,8 +48,8 @@ int numTrans;			/* Number of transactions in the database */
 char dataFile[100];		/* File name of the database */
 char outFile[100];		/* File name to store the result of mining */
 
-list<Table> table_list;
-list<Table_pointer> test_list;
+list<Table> table_list;         /* List of table and sub-table*/
+/*char form for each item*/
 string abcd = "~ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz1234567890!@#$%^&*()-+=[]{}";
 
 
@@ -142,13 +149,17 @@ void input(char *configFile)
 }
 /******************************************************************************************
  *Function: show_time()
+ * Description: show the time 
  */
 void show_time(int i){
 	float time=(float)clock()/CLOCKS_PER_SEC;
 	printf("time %d: %.4f secs.\n", i, time);
 }
 
-
+/******************************************************************************************
+ *Function: destroy()
+ * Description: destroy the table, free the memory
+ */
 void destroy(Table_pointer tp)
 {
 	for( int i = 0 ; i < tp->num_row ; i++ )
@@ -215,6 +226,24 @@ Table_pointer shrink_table(Table_pointer tp)
 	return p;
 }
 
+/******************************************************************************************
+ *Function: init_list
+ *
+ *Description: break the previous table into sub-table and insert into list<table>.
+ * loop through the column-1 item, on each item prune the row which the item column is not '1'
+ * for example:
+ * a b c d
+ * 1 0 1 0
+ * 0 1 1 1
+ * 1 1 0 1
+ * 1 0 1 1
+ * will results these table:
+ * a-sub-table		b-sub-table	c-sub-table
+ * b c d		c d		d
+ * 0 1 0		1 1		0
+ * 1 0 1		0 1		1
+ * 0 1 1				1
+ */
 void init_list(Table_pointer tp)
 {
 	for(int i=0;i<tp->num_column-1;i++)//i loop through each item in table
@@ -282,7 +311,7 @@ void init_list(Table_pointer tp)
 /******************************************************************************************
  * Function: traverse_list()
  *
- * traverse the list and push back
+ * Description: traverse the list, output current table's association rules, and push back the table which is not null
  *
  */
 void traverse_list()
@@ -296,7 +325,6 @@ void traverse_list()
 			cout<<"  "<<lt->str_item+abcd[lt->index[i]]<<" ["<<((lt->count<lt->support[i])?lt->count:lt->support[i])<<"]"<<endl;
 		}
 
-
 		/*sub-sub table*/
 		if(lt->num_column >1)
 		for(int i=0;i<lt->num_column-1;i++)
@@ -305,56 +333,59 @@ void traverse_list()
 
 			Table_pointer np = new Table;//new 
 			
-			/////////////////////////////////////////////////////////////////////////////////////////////////
 			np->num_column = lt->num_column-i-1;//sub table column
-		np->num_row = lt->support[i];
-
-		np->table = new bool*[np->num_row];//support num is the row num of new sub table
-		for(int k=0;k<np->num_row;k++)
-			np->table[k] = new bool[np->num_column];
-
-		/*index, support, string and count*/
-		np->index = new int[np->num_column];
-		np->support = new int[np->num_column];
-		memset(np->support,0,np->num_column*sizeof(int));
-
-		/*sub table*/
-		int m =0;
-		for(int j=0;j<lt->num_row;j++)//j loop through row to find 1
-		{
-			if(lt->table[j][i] == 1){
-				//memcpy(listp->table[m++], &(tp->table[j][i+1]), sizeof(bool)*listp->num_column);
-				//copy each row into new array, however, don't use memcpy() because have to calculate support here:
-				for(int g=0;g<np->num_column;g++)
-				{
-					bool tmp = lt->table[j][g+i+1];
-					np->table[m][g] = tmp;
-					if(tmp == 1)
-						np->support[g]++;
+			np->num_row = lt->support[i];
+	
+			np->table = new bool*[np->num_row];//support num is the row num of new sub table
+			for(int k=0;k<np->num_row;k++)
+				np->table[k] = new bool[np->num_column];
+	
+			/*index, support, string and count*/
+			np->index = new int[np->num_column];
+			np->support = new int[np->num_column];
+			memset(np->support,0,np->num_column*sizeof(int));
+	
+			/*sub table*/
+			int m =0;
+			for(int j=0;j<lt->num_row;j++)//j loop through row to find 1
+			{
+				if(lt->table[j][i] == 1){
+					//memcpy(listp->table[m++], &(tp->table[j][i+1]), sizeof(bool)*listp->num_column);
+					//copy each row into new array, however, don't use memcpy() because have to calculate support here:
+					for(int g=0;g<np->num_column;g++)
+					{
+						bool tmp = lt->table[j][g+i+1];
+						np->table[m][g] = tmp;
+						if(tmp == 1)
+							np->support[g]++;
+					}
+					m++;
 				}
-				m++;
 			}
-		}
-
-		/*index, string, count*/
-		for(int n=0;n<np->num_column;n++)
-		{
-			np->index[n] = lt->index[i+n+1];
-		}
-		np->str_item = lt->str_item + item;
-		np->count = lt->support[i];
+	
+			/*index, string, count*/
+			for(int n=0;n<np->num_column;n++)
+			{
+				np->index[n] = lt->index[i+n+1];
+			}
+			np->str_item = lt->str_item + item;
+			np->count = lt->support[i];
 
 		/*shrink by threshold*/
-		
-			/////////////////////////////////////////////////////////////////////////////////////////////////
-
 			Table_pointer lp = shrink_table(np);
 
 			if(lp->table)
-				table_list.push_back(*lp);
+				table_list.push_back(*lp);// add the table into the list for next processing
 		}
 
-		////destroy(&*lt);
+		/*destroy previous table*/
+		for( int i = 0 ; i < lt->num_row ; i++ )
+			delete [] lt->table[i];
+		delete [] lt->table;
+
+		delete [] lt->index;
+		delete [] lt->support;
+		
 		lt++;
 	}
 }
@@ -379,19 +410,7 @@ void main(int argc, char *argv[])
 
  init_list(tp);
 
- //cout<<table_list.size();
  traverse_list();
-
- 
- //list<Table>::iterator lt = table_list.begin();
- //while(lt != table_list.end())
- //{
-	// cout<<lt->str_item<<lt->count<<" **** ";
-	//for(int i=0;i<lt->num_column;i++)
-	//	cout<<abcd[lt->index[i]]<<" : "<<lt->support[i]<<" ";
-	//lt++;
-	//cout<<endl;
- //}
  
  show_time(2);
  
