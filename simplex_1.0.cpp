@@ -1,9 +1,5 @@
 /* simplex_1.0.cpp
- *
- * Rui Tong
- * Department of Computer Science
- * San Jose State University
- *
+ * 
  */ 
 #include<stdio.h>
 #include<stdlib.h>
